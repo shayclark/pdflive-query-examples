@@ -1,0 +1,26 @@
+---
+// Home page
+import Layout from '../layouts/Layout.astro'
+---
+
+<Layout title="PDF.live Form Examples">
+  <div class="section-card">
+    <h1 class="section-title">PDF.live Form Examples</h1>
+    <p class="muted">Example project demonstrating WPGraphQL queries for FormPage CPT.</p>
+    <div style="margin-top: 24px;">
+      <a href="/forms" style="color: #2563eb; text-decoration: none; font-weight: 500;">
+        → Browse Forms Directory
+      </a>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <h2>Available Routes</h2>
+    <ul class="list">
+      <li><strong>/forms</strong> - All jurisdictions</li>
+      <li><strong>/forms/[jurisdiction]</strong> - Categories by jurisdiction</li>
+      <li><strong>/forms/[jurisdiction]/[category]</strong> - Forms by jurisdiction + category</li>
+      <li><strong>/forms/[jurisdiction]/[category]/[form]</strong> - Individual form page</li>
+    </ul>
+  </div>
+</Layout>

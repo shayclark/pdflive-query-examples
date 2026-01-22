@@ -1,0 +1,13 @@
+---
+// Query display component
+interface Props {
+  query: string
+}
+
+const { query } = Astro.props
+---
+
+<div class="query-box">
+  <strong>GraphQL Query for this page:</strong>
+  <pre>{query}</pre>
+</div>

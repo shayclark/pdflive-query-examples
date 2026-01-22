@@ -1,0 +1,50 @@
+---
+// Main layout component
+import '../styles/global.css'
+
+interface Props {
+  title: string
+  description?: string
+  ogImage?: string
+  ogTitle?: string
+  ogDescription?: string
+}
+
+const { 
+  title, 
+  description = 'Browse PDF.live form pages',
+  ogTitle,
+  ogDescription,
+  ogImage
+} = Astro.props
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+    {description && <meta name="description" content={description} />}
+    
+    {/* OpenGraph tags */}
+    <meta property="og:title" content={ogTitle || title} />
+    {(ogDescription || description) && <meta property="og:description" content={ogDescription || description} />}
+    {ogImage && <meta property="og:image" content={ogImage} />}
+    <meta property="og:type" content="website" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a href="/" class="logo">PDF.live Form Examples</a>
+        <nav class="nav">
+          <a href="/forms">Forms Directory</a>
+        </nav>
+      </div>
+    </header>
+    <main class="container main-content">
+      <slot />
+    </main>
+  </body>
+</html>

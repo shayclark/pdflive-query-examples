@@ -1,0 +1,86 @@
+---
+// Pagination component
+interface Props {
+  currentPage: number
+  totalPages: number
+  baseUrl: string
+}
+
+const { currentPage, totalPages, baseUrl } = Astro.props
+
+// Generate page numbers to display
+const getPageNumbers = () => {
+  const pages: (number | string)[] = []
+  const maxVisible = 7 // Max page numbers to show
+  
+  if (totalPages <= maxVisible) {
+    // Show all pages if total is small
+    for (let i = 1; i <= totalPages; i++) {
+      pages.push(i)
+    }
+  } else {
+    // Always show first page
+    pages.push(1)
+    
+    if (currentPage > 3) {
+      pages.push('...')
+    }
+    
+    // Show pages around current
+    for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+      pages.push(i)
+    }
+    
+    if (currentPage < totalPages - 2) {
+      pages.push('...')
+    }
+    
+    // Always show last page
+    pages.push(totalPages)
+  }
+  
+  return pages
+}
+
+const pageNumbers = getPageNumbers()
+---
+
+<nav class="pagination">
+  {/* Previous button */}
+  {currentPage > 1 ? (
+    <a href={`${baseUrl}?page=${currentPage - 1}`} class="pagination-btn">
+      ← Previous
+    </a>
+  ) : (
+    <span class="pagination-btn pagination-btn-disabled">
+      ← Previous
+    </span>
+  )}
+  
+  {/* Page numbers */}
+  <div class="pagination-numbers">
+    {pageNumbers.map(page => (
+      typeof page === 'number' ? (
+        <a 
+          href={`${baseUrl}?page=${page}`} 
+          class={`pagination-number ${page === currentPage ? 'pagination-number-active' : ''}`}
+        >
+          {page}
+        </a>
+      ) : (
+        <span class="pagination-ellipsis">{page}</span>
+      )
+    ))}
+  </div>
+  
+  {/* Next button */}
+  {currentPage < totalPages ? (
+    <a href={`${baseUrl}?page=${currentPage + 1}`} class="pagination-btn">
+      Next →
+    </a>
+  ) : (
+    <span class="pagination-btn pagination-btn-disabled">
+      Next →
+    </span>
+  )}
+</nav>

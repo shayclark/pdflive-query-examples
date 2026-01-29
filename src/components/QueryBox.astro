@@ -2,12 +2,16 @@
 // Query display component
 interface Props {
   query: string
+  variables?: Record<string, unknown>
 }
 
-const { query } = Astro.props
+const { query, variables } = Astro.props
+const variablesPreview = JSON.stringify(variables ?? {}, null, 2)
 ---
 
 <div class="query-box">
   <strong>GraphQL Query for this page:</strong>
   <pre>{query}</pre>
+  <strong>Variables:</strong>
+  <pre>{variablesPreview}</pre>
 </div>

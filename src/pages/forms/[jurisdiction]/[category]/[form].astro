@@ -1,365 +1,484 @@
 ---
-// Individual form page - displays full FormPage CPT with ACF fields
-import Layout from '../../../../layouts/Layout.astro'
-import Breadcrumbs from '../../../../components/Breadcrumbs.astro'
-import QueryBox from '../../../../components/QueryBox.astro'
-import { graphqlRequest } from '../../../../lib/wpGraphql'
+// Individual form page - displays linked FormPage + selected FormFile
+import Layout from "../../../../layouts/Layout.astro";
+import Breadcrumbs from "../../../../components/Breadcrumbs.astro";
+import QueryBox from "../../../../components/QueryBox.astro";
+import { graphqlRequest } from "../../../../lib/wpGraphql";
 
 // Enable server-side rendering for dynamic routes
-export const prerender = false
+export const prerender = false;
 
-// GraphQL query for form page - get all forms from category/jurisdiction
-const QUERY = `
-query FormPage($categorySlug: ID!, $jurisdictionSlug: ID!) {
-  formPageCategory(id: $categorySlug, idType: SLUG) {
-    formPages(first: 200) {
+// GraphQL query for a specific form-file and its linked form-page
+const FILE_QUERY = `
+query FormFilePage($fileSlug: ID!) {
+  formFile(id: $fileSlug, idType: SLUG) {
+    title
+    slug
+    featuredImage {
+      node {
+        sourceUrl
+      }
+    }
+    formPageJurisdictions {
       nodes {
-        id
-        title
+        name
         slug
-        date
-        formPageJurisdictions {
-          nodes {
-            id
-            name
-            slug
-          }
+      }
+    }
+    formPageCategories {
+      nodes {
+        name
+        slug
+      }
+    }
+    formFileData {
+      pdfFile {
+        node {
+          sourceUrl
+          mediaItemUrl
         }
-        formPageCategories {
-          nodes {
-            id
-            name
+      }
+      formPageLinkage(first: 1) {
+        nodes {
+          ... on FormPage {
+            title
             slug
-          }
-        }
-        formPageData {
-          shortName
-          formName
-          shortDescription
-          longDescription
-          generalInstructions
-          formUrl
-          steps {
-            step
-          }
-          formPdfs {
-            formLabel
-            pdf {
-              node {
-                sourceUrl
-                title
-                mediaItemUrl
+            formPageData {
+              shortName
+              formName
+              shortDescription
+              longDescription
+              generalInstructions
+              formUrl
+              steps {
+                step
+              }
+              formFiles(first: 50) {
+                nodes {
+                  ... on FormFile {
+                    id
+                    title
+                    slug
+                  }
+                }
               }
             }
-            formThumbnail {
-              node {
+            seo {
+              title
+              metaDesc
+              opengraphTitle
+              opengraphDescription
+              opengraphImage {
                 sourceUrl
-                mediaItemUrl
               }
             }
-          }
-        }
-        seo {
-          title
-          metaDesc
-          opengraphTitle
-          opengraphDescription
-          opengraphImage {
-            sourceUrl
           }
         }
       }
     }
   }
-  formPageJurisdiction(id: $jurisdictionSlug, idType: SLUG) {
-    id
-    name
-    slug
-  }
 }
-`
+`;
 
-type FormPageResponse = {
-  formPageCategory: {
-    formPages: {
-      nodes: Array<{
-        id: string
-        title: string | null
-        slug: string
-        date: string
-        formPageJurisdictions: {
-          nodes: Array<{
-            id: string
-            name: string
-            slug: string
-          }>
-        }
-        formPageCategories: {
-          nodes: Array<{
-            id: string
-            name: string
-            slug: string
-          }>
-        }
-        formPageData: {
-          shortName: string | null
-          formName: string | null
-          shortDescription: string | null
-          longDescription: string | null
-          generalInstructions: string | null
-          formUrl: string | null
-          steps: Array<{
-            step: string | null
-          }> | null
-          formPdfs: Array<{
-            formLabel: string | null
-            pdf: {
-              node: {
-                sourceUrl: string
-                title: string | null
-                mediaItemUrl: string
+// Fallback query to resolve a form-file slug when none provided
+const FALLBACK_QUERY = `
+query FormFileFallback($categorySlug: ID!, $jurisdictionSlug: ID!, $fallbackSize: Int!) {
+  formFiles(where: { offsetPagination: { offset: 0, size: $fallbackSize }, formPageCategory: [$categorySlug], formPageJurisdiction: [$jurisdictionSlug] }) {
+    nodes {
+      slug
+      formFileData {
+        formPageLinkage(first: 1) {
+          nodes {
+            ... on FormPage {
+              slug
+              formPageData {
+                shortName
               }
-            } | null
-            formThumbnail: {
-              node: {
-                sourceUrl: string
-                mediaItemUrl: string
-              }
-            } | null
-          }> | null
-        } | null
-        seo: {
-          title: string | null
-          metaDesc: string | null
-          opengraphTitle: string | null
-          opengraphDescription: string | null
-          opengraphImage: {
-            sourceUrl: string
-          } | null
-        } | null
-      }>
+            }
+          }
+        }
+      }
     }
   }
-  formPageJurisdiction: {
-    id: string
-    name: string
-    slug: string
-  }
 }
+`;
+
+type FormFileResponse = {
+  formFile: {
+    title: string | null;
+    slug: string;
+    featuredImage: {
+      node: {
+        sourceUrl: string;
+      };
+    } | null;
+    formPageJurisdictions: {
+      nodes: Array<{
+        name: string;
+        slug: string;
+      }>;
+    };
+    formPageCategories: {
+      nodes: Array<{
+        name: string;
+        slug: string;
+      }>;
+    };
+    formFileData: {
+      pdfFile: {
+        node: {
+          sourceUrl: string;
+          mediaItemUrl: string;
+        };
+      } | null;
+      formPageLinkage: {
+        nodes: Array<{
+          title: string | null;
+          slug: string;
+          formPageData: {
+            shortName: string | null;
+            formName: string | null;
+            shortDescription: string | null;
+            longDescription: string | null;
+            generalInstructions: string | null;
+            formUrl: string | null;
+            steps: Array<{
+              step: string | null;
+            }> | null;
+            formFiles: {
+              nodes: Array<{
+                title: string | null;
+                slug: string;
+              }>;
+            } | null;
+          } | null;
+          seo: {
+            title: string | null;
+            metaDesc: string | null;
+            opengraphTitle: string | null;
+            opengraphDescription: string | null;
+            opengraphImage: {
+              sourceUrl: string;
+            } | null;
+          } | null;
+        }>;
+      } | null;
+    } | null;
+  } | null;
+};
+
+type FormFileFallbackResponse = {
+  formFiles: {
+    nodes: Array<{
+      slug: string;
+      formFileData: {
+        formPageLinkage: {
+          nodes: Array<{
+            slug: string;
+            formPageData: {
+              shortName: string | null;
+            } | null;
+          }>;
+        } | null;
+      } | null;
+    }>;
+  };
+};
 
 // Get params from URL
-const { jurisdiction, category, form } = Astro.params
+const { jurisdiction, category, form } = Astro.params;
 
 if (!jurisdiction || !category || !form) {
-  return Astro.redirect('/forms')
+  return Astro.redirect("/forms");
 }
 
-// Get form-label query param if provided
-const url = new URL(Astro.request.url)
-const selectedFormLabel = url.searchParams.get('form-label')
+// Get form-file slug query param if provided
+const url = new URL(Astro.request.url);
+const selectedFileSlug = url.searchParams.get("file");
 
-// Fetch data using category and jurisdiction
-const data = await graphqlRequest<FormPageResponse>(QUERY, { 
-  categorySlug: category,
-  jurisdictionSlug: jurisdiction
-})
+if (!selectedFileSlug) {
+  const fallbackData = await graphqlRequest<FormFileFallbackResponse>(
+    FALLBACK_QUERY,
+    {
+      categorySlug: category,
+      jurisdictionSlug: jurisdiction,
+      fallbackSize: 50,
+    },
+  );
 
-// Find form by shortName
-const formPage = data.formPageCategory.formPages.nodes.find(f => {
-  const shortName = f.formPageData?.shortName
-  if (!shortName) return false
-  
-  // Normalize both for comparison (lowercase, remove special chars)
-  const normalizedShortName = shortName.toLowerCase().replace(/[^a-z0-9]/g, '')
-  const normalizedFormParam = form.toLowerCase().replace(/[^a-z0-9]/g, '')
-  
-  return normalizedShortName === normalizedFormParam
-})
+  const normalizedFormParam = form.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const fallbackFile = fallbackData.formFiles.nodes.find((file) => {
+    const linkedPage = file.formFileData?.formPageLinkage?.nodes?.[0];
+    const shortName = linkedPage?.formPageData?.shortName;
+    if (!shortName) {
+      return false;
+    }
+    const normalizedShortName = shortName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+    return normalizedShortName === normalizedFormParam;
+  });
+  const fallbackLinkedPage =
+    fallbackFile?.formFileData?.formPageLinkage?.nodes?.[0];
+  const fallbackFileSlug = fallbackFile?.slug;
+  const fallbackFormSlug =
+    fallbackLinkedPage?.formPageData?.shortName ||
+    fallbackLinkedPage?.slug ||
+    form;
 
-if (!formPage) {
-  return Astro.redirect(`/forms/${jurisdiction}/${category}`)
+  if (fallbackFileSlug) {
+    return Astro.redirect(
+      `/forms/${jurisdiction}/${category}/${fallbackFormSlug}?file=${encodeURIComponent(fallbackFileSlug)}`,
+    );
+  }
+
+  return Astro.redirect(`/forms/${jurisdiction}/${category}`);
 }
 
-// Verify this form belongs to the correct jurisdiction
-const jurisdictionTerm = formPage.formPageJurisdictions.nodes.find(j => j.slug === jurisdiction)
-if (!jurisdictionTerm) {
-  return Astro.redirect('/forms')
+const fileData = await graphqlRequest<FormFileResponse>(FILE_QUERY, {
+  fileSlug: selectedFileSlug,
+});
+
+const formFile = fileData.formFile;
+const formPage = formFile?.formFileData?.formPageLinkage?.nodes?.[0];
+
+if (!formFile || !formPage) {
+  return Astro.redirect(`/forms/${jurisdiction}/${category}`);
 }
 
-const categoryTerm = formPage.formPageCategories.nodes.find(c => c.slug === category)
-const jurisdictionData = data.formPageJurisdiction
+const acf = formPage.formPageData;
+const availableFiles = acf?.formFiles?.nodes ?? [];
 
-const acf = formPage.formPageData
-const pdfs = acf?.formPdfs || []
+const jurisdictionTerm =
+  formFile.formPageJurisdictions.nodes.find((j) => j.slug === jurisdiction) ||
+  formFile.formPageJurisdictions.nodes[0];
+const categoryTerm =
+  formFile.formPageCategories.nodes.find((c) => c.slug === category) ||
+  formFile.formPageCategories.nodes[0];
 
-// Determine which PDF to show: selected by form-label param, or first one
-const defaultPdf = pdfs[0]
-const activePdf = selectedFormLabel 
-  ? pdfs.find(p => p.formLabel === selectedFormLabel) || defaultPdf
-  : defaultPdf
+const normalizedShortName = (acf?.shortName || formPage.slug || "")
+  .toLowerCase()
+  .replace(/[^a-z0-9]/g, "");
+const normalizedFormParam = form.toLowerCase().replace(/[^a-z0-9]/g, "");
+const isFormMatch =
+  normalizedShortName !== "" && normalizedShortName === normalizedFormParam;
+
+if (
+  !jurisdictionTerm ||
+  !categoryTerm ||
+  !isFormMatch ||
+  jurisdictionTerm.slug !== jurisdiction ||
+  categoryTerm.slug !== category
+) {
+  const canonicalFormSlug = acf?.shortName || formPage.slug || form;
+  return Astro.redirect(
+    `/forms/${jurisdictionTerm?.slug || jurisdiction}/${categoryTerm?.slug || category}/${canonicalFormSlug}?file=${encodeURIComponent(formFile.slug)}`,
+  );
+}
+
+const activeFile = formFile;
+
+const jurisdictionLabel = jurisdictionTerm?.name || jurisdiction;
+const categoryLabel = categoryTerm?.name || category;
+const formLabel = acf?.shortName || formPage.title || form;
+const formSlug = acf?.shortName || formPage.slug || form;
 
 const breadcrumbs = [
-  { label: 'Home', to: '/' },
-  { label: 'Forms', to: '/forms' },
-  { label: jurisdictionData.name, to: `/forms/${jurisdiction}` },
-  { label: categoryTerm?.name || 'Forms', to: `/forms/${jurisdiction}/${category}` },
-  { label: acf?.shortName || formPage.title || form }
-]
+  { label: "Home", to: "/" },
+  { label: "Forms", to: "/forms" },
+  { label: jurisdictionLabel, to: `/forms/${jurisdiction}` },
+  {
+    label: categoryLabel,
+    to: `/forms/${jurisdiction}/${category}`,
+  },
+  { label: formLabel },
+];
 
-const seo = formPage.seo
-const pageTitle = seo?.title || formPage.title || form
-const pageDescription = seo?.metaDesc || acf?.shortDescription || `Form page for ${formPage.title}`
-const ogImage = seo?.opengraphImage?.sourceUrl
+const seo = formPage.seo;
+const pageTitle = seo?.title || formPage.title || formLabel;
+const pageDescription =
+  seo?.metaDesc || acf?.shortDescription || `Form page for ${formLabel}`;
+const ogTitle = seo?.opengraphTitle ?? undefined;
+const ogDescription = seo?.opengraphDescription ?? undefined;
+const ogImage = seo?.opengraphImage?.sourceUrl;
 ---
 
-<Layout 
+<Layout
   title={pageTitle}
   description={pageDescription}
-  ogTitle={seo?.opengraphTitle}
-  ogDescription={seo?.opengraphDescription}
+  ogTitle={ogTitle}
+  ogDescription={ogDescription}
   ogImage={ogImage}
 >
   <Breadcrumbs items={breadcrumbs} />
 
   <article class="section-card">
     <h1 class="section-title">{acf?.shortName || formPage.title || form}</h1>
-    {acf?.formName && acf.formName !== acf.shortName && (
-      <p style="font-size: 18px; color: #6b7280; margin-bottom: 16px;">{acf.formName}</p>
-    )}
-    
+    {
+      acf?.formName && acf.formName !== acf.shortName && (
+        <p style="font-size: 18px; color: #6b7280; margin-bottom: 16px;">
+          {acf.formName}
+        </p>
+      )
+    }
+
     {/* Taxonomies */}
     <div class="tag-list" style="margin-bottom: 16px;">
-      <a href={`/forms/${jurisdictionData.slug}`} class="pill">
-        📍 {jurisdictionData.name}
+      <a href={`/forms/${jurisdictionTerm?.slug || jurisdiction}`} class="pill">
+        📍 {jurisdictionLabel}
       </a>
-      {categoryTerm && (
-        <a href={`/forms/${jurisdiction}/${categoryTerm.slug}`} class="pill">
-          📂 {categoryTerm.name}
-        </a>
-      )}
+      {
+        categoryTerm && (
+          <a href={`/forms/${jurisdiction}/${categoryTerm.slug}`} class="pill">
+            📂 {categoryLabel}
+          </a>
+        )
+      }
     </div>
-    
+
     {/* PDF Versions/Years */}
-    {pdfs.length > 1 && (
-      <div class="form-detail">
-        <h2>Available Versions</h2>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          {pdfs.map((pdf, index) => {
-            const isActive = pdf === activePdf
-            const pdfUrl = pdf.formLabel 
-              ? `/forms/${jurisdiction}/${category}/${form}?form-label=${encodeURIComponent(pdf.formLabel)}`
-              : `/forms/${jurisdiction}/${category}/${form}`
-            
-            return (
-              <a 
-                href={pdfUrl}
-                class={`pill ${isActive ? 'pill-active' : 'pill-inactive'}`}
-                style={isActive ? 'background: #2563eb; color: white;' : ''}
-              >
-                {pdf.formLabel || `Version ${index + 1}`}
-              </a>
-            )
-          })}
+    {
+      availableFiles.length > 1 && (
+        <div class="form-detail">
+          <h2>Available Versions</h2>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            {availableFiles.map((file, index) => {
+              const isActive = file.slug === activeFile.slug;
+              const fileUrl = `/forms/${jurisdiction}/${category}/${formSlug}?file=${encodeURIComponent(file.slug)}`;
+
+              return (
+                <a
+                  href={fileUrl}
+                  class={`pill ${isActive ? "pill-active" : "pill-inactive"}`}
+                  style={isActive ? "background: #2563eb; color: white;" : ""}
+                >
+                  {file.title || `Version ${index + 1}`}
+                </a>
+              );
+            })}
+          </div>
         </div>
-      </div>
-    )}
+      )
+    }
 
     {/* ACF: Short Name */}
-    {acf?.shortName && (
-      <div class="form-detail">
-        <h2>Short Name</h2>
-        <p>{acf.shortName}</p>
-      </div>
-    )}
+    {
+      acf?.shortName && (
+        <div class="form-detail">
+          <h2>Short Name</h2>
+          <p>{acf.shortName}</p>
+        </div>
+      )
+    }
 
     {/* ACF: Form Name */}
-    {acf?.formName && (
-      <div class="form-detail">
-        <h2>Form Name</h2>
-        <p>{acf.formName}</p>
-      </div>
-    )}
+    {
+      acf?.formName && (
+        <div class="form-detail">
+          <h2>Form Name</h2>
+          <p>{acf.formName}</p>
+        </div>
+      )
+    }
 
     {/* ACF: Short Description */}
-    {acf?.shortDescription && (
-      <div class="form-detail">
-        <h2>Short Description</h2>
-        <p class="text-block">{acf.shortDescription}</p>
-      </div>
-    )}
+    {
+      acf?.shortDescription && (
+        <div class="form-detail">
+          <h2>Short Description</h2>
+          <p class="text-block">{acf.shortDescription}</p>
+        </div>
+      )
+    }
 
     {/* ACF: Long Description */}
-    {acf?.longDescription && (
-      <div class="form-detail">
-        <h2>Long Description</h2>
-        <p class="text-block">{acf.longDescription}</p>
-      </div>
-    )}
+    {
+      acf?.longDescription && (
+        <div class="form-detail">
+          <h2>Long Description</h2>
+          <p class="text-block">{acf.longDescription}</p>
+        </div>
+      )
+    }
 
     {/* ACF: General Instructions */}
-    {acf?.generalInstructions && (
-      <div class="form-detail">
-        <h2>General Instructions</h2>
-        <p class="text-block">{acf.generalInstructions}</p>
-      </div>
-    )}
+    {
+      acf?.generalInstructions && (
+        <div class="form-detail">
+          <h2>General Instructions</h2>
+          <p class="text-block">{acf.generalInstructions}</p>
+        </div>
+      )
+    }
 
     {/* ACF: Steps (Repeater) */}
-    {acf?.steps && acf.steps.length > 0 && (
-      <div class="form-detail">
-        <h2>Steps</h2>
-        <ol class="steps-list">
-          {acf.steps.map(stepItem => stepItem.step && (
-            <li>{stepItem.step}</li>
-          ))}
-        </ol>
-      </div>
-    )}
+    {
+      acf?.steps && acf.steps.length > 0 && (
+        <div class="form-detail">
+          <h2>Steps</h2>
+          <ol class="steps-list">
+            {acf.steps.map(
+              (stepItem) => stepItem.step && <li>{stepItem.step}</li>,
+            )}
+          </ol>
+        </div>
+      )
+    }
 
     {/* ACF: Form URL */}
-    {acf?.formUrl && (
-      <div class="form-detail">
-        <h2>Form URL</h2>
-        <a href={acf.formUrl} target="_blank" rel="noopener noreferrer">
-          {acf.formUrl}
-        </a>
-      </div>
-    )}
+    {
+      acf?.formUrl && (
+        <div class="form-detail">
+          <h2>Form URL</h2>
+          <a href={acf.formUrl} target="_blank" rel="noopener noreferrer">
+            {acf.formUrl}
+          </a>
+        </div>
+      )
+    }
 
     {/* ACF: Form PDF Download */}
-    {activePdf && (
-      <div class="form-detail">
-        <h2>Download Form</h2>
-        <div class="pdf-item" style="background: #f9fafb;">
-          <div style="display: flex; gap: 16px; align-items: flex-start;">
-            {activePdf.formThumbnail?.node && (
-              <img 
-                src={activePdf.formThumbnail.node.sourceUrl} 
-                alt={activePdf.formLabel || 'Form thumbnail'}
-                style="max-width: 200px; border-radius: 8px; flex-shrink: 0; border: 1px solid #e5e7eb;"
-              />
-            )}
-            
-            <div style="flex: 1;">
-              {activePdf.formLabel && (
-                <h3 style="margin-top: 0;">{activePdf.formLabel}</h3>
+    {
+      activeFile && (
+        <div class="form-detail">
+          <h2>Download Form</h2>
+          <div class="pdf-item" style="background: #f9fafb;">
+            <div style="display: flex; gap: 16px; align-items: flex-start;">
+              {activeFile.featuredImage?.node && (
+                <img
+                  src={activeFile.featuredImage.node.sourceUrl}
+                  alt={activeFile.title || "Form thumbnail"}
+                  style="max-width: 200px; border-radius: 8px; flex-shrink: 0; border: 1px solid #e5e7eb;"
+                />
               )}
-              {activePdf.pdf?.node && (
-                <a 
-                  href={activePdf.pdf.node.sourceUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin-top: 12px;"
-                >
-                  📄 Download PDF
-                </a>
-              )}
+
+              <div style="flex: 1;">
+                {activeFile.title && (
+                  <h3 style="margin-top: 0;">{activeFile.title}</h3>
+                )}
+                {activeFile.formFileData?.pdfFile?.node && (
+                  <a
+                    href={
+                      activeFile.formFileData.pdfFile.node.mediaItemUrl ||
+                      activeFile.formFileData.pdfFile.node.sourceUrl
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin-top: 12px;"
+                  >
+                    📄 Download PDF
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    )}
+      )
+    }
   </article>
 
-  <QueryBox query={QUERY} />
+  <QueryBox
+    query={FILE_QUERY}
+    variables={{ fileSlug: selectedFileSlug }}
+  />
 </Layout>

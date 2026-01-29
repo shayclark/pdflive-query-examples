@@ -1,27 +1,24 @@
 ---
 // Jurisdiction page - shows categories for a specific jurisdiction
-import Layout from '../../../layouts/Layout.astro'
-import Breadcrumbs from '../../../components/Breadcrumbs.astro'
-import QueryBox from '../../../components/QueryBox.astro'
-import Pagination from '../../../components/Pagination.astro'
-import { graphqlRequest } from '../../../lib/wpGraphql'
+import Layout from "../../../layouts/Layout.astro";
+import Breadcrumbs from "../../../components/Breadcrumbs.astro";
+import QueryBox from "../../../components/QueryBox.astro";
+import Pagination from "../../../components/Pagination.astro";
+import { graphqlRequest } from "../../../lib/wpGraphql";
 
 // Enable server-side rendering for dynamic routes
-export const prerender = false
+export const prerender = false;
 
 // Get page number from URL
-const url = new URL(Astro.request.url)
-const currentPage = parseInt(url.searchParams.get('page') || '1', 10)
-const perPage = 20
+const url = new URL(Astro.request.url);
+const currentPage = parseInt(url.searchParams.get("page") || "1", 10);
+const perPage = 20;
 
 // GraphQL query
 const QUERY = `
-query JurisdictionPage($slug: ID!) {
+query JurisdictionPage($slug: ID!, $offset: Int!, $size: Int!) {
   formPageJurisdiction(id: $slug, idType: SLUG) {
-    id
     name
-    slug
-    count
     seo {
       title
       metaDesc
@@ -31,152 +28,159 @@ query JurisdictionPage($slug: ID!) {
         sourceUrl
       }
     }
-    formPages(first: 200) {
-      nodes {
-        id
-        title
-        slug
-        formPageJurisdictions {
-          nodes {
-            slug
-          }
+  }
+  formFileCategoriesByJurisdiction(jurisdiction: $slug) {
+    name
+    slug
+    count
+  }
+  formFiles(where: { offsetPagination: { offset: $offset, size: $size }, formPageJurisdiction: [$slug] }) {
+    nodes {
+      title
+      slug
+      featuredImage {
+        node {
+          sourceUrl
         }
-        formPageCategories {
-          nodes {
-            slug
-          }
+      }
+      formPageCategories {
+        nodes {
+          name
+          slug
         }
-        formPageData {
-          shortName
-          shortDescription
-          formPdfs {
-            formLabel
-            formThumbnail {
-              node {
-                sourceUrl
-                mediaItemUrl
+      }
+      formFileData {
+        formPageLinkage(first: 1) {
+          nodes {
+            ... on FormPage {
+              slug
+              formPageData {
+                shortName
+                shortDescription
               }
             }
           }
         }
       }
     }
-  }
-  formPageCategories(first: 200) {
-    nodes {
-      id
-      name
-      slug
-      count
+    pageInfo {
+      offsetPagination {
+        total
+      }
     }
   }
 }
-`
+`;
 
 type JurisdictionPageResponse = {
   formPageJurisdiction: {
-    id: string
-    name: string
-    slug: string
-    count: number | null
+    name: string;
     seo: {
-      title: string | null
-      metaDesc: string | null
-      opengraphTitle: string | null
-      opengraphDescription: string | null
+      title: string | null;
+      metaDesc: string | null;
+      opengraphTitle: string | null;
+      opengraphDescription: string | null;
       opengraphImage: {
-        sourceUrl: string
-      } | null
-    } | null
-    formPages: {
-      nodes: Array<{
-        id: string
-        title: string | null
-        slug: string
-        formPageJurisdictions: {
-          nodes: Array<{ slug: string }>
-        }
-        formPageCategories: {
-          nodes: Array<{ slug: string }>
-        }
-        formPageData: {
-          shortName: string | null
-          shortDescription: string | null
-          formPdfs: Array<{
-            formLabel: string | null
-            formThumbnail: {
-              node: {
-                sourceUrl: string
-                mediaItemUrl: string
-              }
-            } | null
-          }> | null
-        } | null
-      }>
-    }
-  } | null
-  formPageCategories: {
+        sourceUrl: string;
+      } | null;
+    } | null;
+  } | null;
+  formFileCategoriesByJurisdiction: Array<{
+    name: string;
+    slug: string;
+    count: number | null;
+  }>;
+  formFiles: {
     nodes: Array<{
-      id: string
-      name: string
-      slug: string
-      count: number | null
-    }>
-  }
-}
+      title: string | null;
+      slug: string;
+      featuredImage: {
+        node: {
+          sourceUrl: string;
+        };
+      } | null;
+      formPageCategories: {
+        nodes: Array<{
+          name: string;
+          slug: string;
+        }>;
+      };
+      formFileData: {
+        formPageLinkage: {
+          nodes: Array<{
+            slug: string;
+            formPageData: {
+              shortName: string | null;
+              shortDescription: string | null;
+            } | null;
+          }>;
+        } | null;
+      } | null;
+    }>;
+    pageInfo: {
+      offsetPagination: {
+        total: number | null;
+      } | null;
+    };
+  };
+};
 
 // Get jurisdiction slug from URL
-const { jurisdiction } = Astro.params
+const { jurisdiction } = Astro.params;
 
 if (!jurisdiction) {
-  return Astro.redirect('/forms')
+  return Astro.redirect("/forms");
 }
+
+const offset = Math.max(currentPage - 1, 0) * perPage;
 
 // Fetch data
-const data = await graphqlRequest<JurisdictionPageResponse>(QUERY, { slug: jurisdiction })
+const data = await graphqlRequest<JurisdictionPageResponse>(QUERY, {
+  slug: jurisdiction,
+  offset,
+  size: perPage,
+});
 
 if (!data.formPageJurisdiction) {
-  return Astro.redirect('/forms')
+  return Astro.redirect("/forms");
 }
 
-const jurisdictionData = data.formPageJurisdiction
+const jurisdictionData = data.formPageJurisdiction;
 
-// Get forms directly from jurisdiction connection (already filtered)
-const filteredForms = jurisdictionData.formPages.nodes
+const formFiles = data.formFiles.nodes;
+const totalItems =
+  data.formFiles.pageInfo.offsetPagination?.total ?? data.formFiles.nodes.length;
+const totalPages = totalItems > 0 ? Math.ceil(totalItems / perPage) : 1;
+const pageNumber = Math.min(Math.max(currentPage, 1), totalPages);
 
-// Now count forms per category (prefiltered by jurisdiction)
-const categoryCounts = new Map<string, number>()
-filteredForms.forEach(form => {
-  form.formPageCategories.nodes.forEach(cat => {
-    categoryCounts.set(cat.slug, (categoryCounts.get(cat.slug) || 0) + 1)
-  })
-})
+if (totalPages > 0 && currentPage > totalPages) {
+  return Astro.redirect(`/forms/${jurisdiction}?page=${totalPages}`);
+}
 
-// Filter categories to only show those with forms in this jurisdiction
-const allCategories = data.formPageCategories.nodes
-  .filter(c => categoryCounts.has(c.slug) && categoryCounts.get(c.slug)! > 0)
-  .map(c => ({
-    ...c,
-    count: categoryCounts.get(c.slug) || 0
-  }))
+const categoriesWithCounts = data.formFileCategoriesByJurisdiction.filter(
+  (category) => category.count && category.count > 0,
+);
 
 const breadcrumbs = [
-  { label: 'Home', to: '/' },
-  { label: 'Forms', to: '/forms' },
-  { label: jurisdictionData.name }
-]
+  { label: "Home", to: "/" },
+  { label: "Forms", to: "/forms" },
+  { label: jurisdictionData.name },
+];
 
-const seo = jurisdictionData.seo
-const pageTitle = seo?.title || `${jurisdictionData.name} Forms`
-const pageDescription = seo?.metaDesc || `Browse form pages for ${jurisdictionData.name}.`
-const ogImage = seo?.opengraphImage?.sourceUrl
+const seo = jurisdictionData.seo;
+const pageTitle = seo?.title || `${jurisdictionData.name} Forms`;
+const pageDescription =
+  seo?.metaDesc || `Browse form pages for ${jurisdictionData.name}.`;
+const ogTitle = seo?.opengraphTitle ?? undefined;
+const ogDescription = seo?.opengraphDescription ?? undefined;
+const ogImage = seo?.opengraphImage?.sourceUrl;
 ---
 
-<Layout 
+<Layout
   title={pageTitle}
   description={pageDescription}
-  ogTitle={seo?.opengraphTitle}
-  ogDescription={seo?.opengraphDescription}
+  ogTitle={ogTitle}
+  ogDescription={ogDescription}
   ogImage={ogImage}
 >
   <Breadcrumbs items={breadcrumbs} />
@@ -185,103 +189,91 @@ const ogImage = seo?.opengraphImage?.sourceUrl
     <h1 class="section-title">{jurisdictionData.name} Forms</h1>
     <p class="muted">Browse by category.</p>
     <ul class="list">
-      {allCategories.map(category => (
-        <li class="list-item">
-          <a href={`/forms/${jurisdiction}/${category.slug}`}>
-            {category.name}
-          </a>
-          <span class="pill">{category.count ?? 0} forms</span>
-        </li>
-      ))}
+      {
+        categoriesWithCounts.map((category) => (
+          <li class="list-item">
+            <a href={`/forms/${jurisdiction}/${category.slug}`}>
+              {category.name}
+            </a>
+            <span class="pill">{category.count ?? 0} forms</span>
+          </li>
+        ))
+      }
     </ul>
   </section>
 
-  {(() => {
-    // Flatten all PDFs from all forms into individual cards
-    const allPdfs = filteredForms.flatMap(form => {
-      const acf = form.formPageData
-      const pdfs = acf?.formPdfs || []
-      const category = form.formPageCategories.nodes[0]
-      
-      // If no PDFs, create a single entry for the form itself
-      if (pdfs.length === 0) {
-        return [{
-          form,
-          pdf: null,
-          category,
-          thumbnail: '/favicon.svg',
-          title: acf?.shortName || form.title || form.slug,
-          description: acf?.shortDescription
-        }]
-      }
-      
-      // Create an entry for each PDF
-      return pdfs.map(pdf => ({
-        form,
-        pdf,
-        category,
-        thumbnail: pdf.formThumbnail?.node?.sourceUrl || '/favicon.svg',
-        title: pdf.formLabel || acf?.shortName || form.title || form.slug,
-        description: acf?.shortDescription
-      }))
-    })
-    
-    // Pagination
-    const totalPdfs = allPdfs.length
-    const totalPages = Math.ceil(totalPdfs / perPage)
-    const startIndex = (currentPage - 1) * perPage
-    const endIndex = startIndex + perPage
-    const paginatedPdfs = allPdfs.slice(startIndex, endIndex)
-    
-    return allPdfs.length > 0 && (
-      <section class="section-card">
-        <h2 class="section-title">All PDFs in {jurisdictionData.name}</h2>
-        <p class="muted">
-          {totalPdfs} PDF{totalPdfs !== 1 ? 's' : ''} available
-          {totalPages > 1 && ` · Page ${currentPage} of ${totalPages}`}
-        </p>
-        <div class="grid form-grid">
-          {paginatedPdfs.map((item, index) => {
-            const { form, pdf, category, thumbnail, title, description } = item
-            const shortName = form.formPageData?.shortName || form.slug
-            
-            // Build URL using shortName with form-label query param if this is a specific PDF
-            let formUrl = `/forms/${jurisdiction}/${category?.slug || 'uncategorized'}/${shortName}`
-            if (pdf?.formLabel) {
-              formUrl += `?form-label=${encodeURIComponent(pdf.formLabel)}`
-            }
-            
-            return (
-              <a href={formUrl} class="form-card" key={`pdf-${index}`}>
-                <div class="form-card-image">
-                  <img src={thumbnail} alt={title} loading="lazy" />
-                </div>
-                <div class="form-card-content">
-                  <h3>{title}</h3>
-                  {description && (
-                    <p class="muted">{description.substring(0, 100)}{description.length > 100 ? '...' : ''}</p>
-                  )}
-                  {category && (
-                    <span class="pill" style="margin-top: 8px;">
-                      {category.name}
-                    </span>
-                  )}
-                </div>
-              </a>
-            )
-          })}
-        </div>
-        
-        {totalPages > 1 && (
-          <Pagination 
-            currentPage={currentPage} 
-            totalPages={totalPages} 
-            baseUrl={`/forms/${jurisdiction}`} 
-          />
-        )}
-      </section>
-    )
-  })()}
+  {
+    (() => {
+      return (
+        formFiles.length > 0 && (
+          <section class="section-card">
+            <h2 class="section-title">All PDFs in {jurisdictionData.name}</h2>
+            <p class="muted">
+              {formFiles.length} PDF{formFiles.length !== 1 ? "s" : ""} on this
+              page
+              {totalPages > 1 && ` · Page ${pageNumber} of ${totalPages}`}
+            </p>
+            <div class="grid form-grid">
+              {formFiles.map((file) => {
+                const linkedPage =
+                  file.formFileData?.formPageLinkage?.nodes?.[0];
+                const category = file.formPageCategories.nodes[0];
+                const categorySlug = category?.slug || "uncategorized";
+                const categoryLabel = category?.name || "Uncategorized";
+                const shortName =
+                  linkedPage?.formPageData?.shortName ||
+                  linkedPage?.slug ||
+                  file.slug;
+                const title =
+                  file.title ||
+                  linkedPage?.formPageData?.shortName ||
+                  linkedPage?.slug ||
+                  file.slug;
+                const description = linkedPage?.formPageData?.shortDescription;
+                const thumbnail =
+                  file.featuredImage?.node?.sourceUrl || "/favicon.svg";
 
-  <QueryBox query={QUERY} />
+                const formUrl = `/forms/${jurisdiction}/${categorySlug}/${shortName}?file=${encodeURIComponent(file.slug)}`;
+
+                return (
+                  <a href={formUrl} class="form-card">
+                    <div class="form-card-image">
+                      <img src={thumbnail} alt={title} loading="lazy" />
+                    </div>
+                    <div class="form-card-content">
+                      <h3>{title}</h3>
+                      {description && (
+                        <p class="muted">
+                          {description.substring(0, 100)}
+                          {description.length > 100 ? "..." : ""}
+                        </p>
+                      )}
+                      <span class="pill" style="margin-top: 8px;">
+                        {categoryLabel}
+                      </span>
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+
+            <Pagination
+              currentPage={pageNumber}
+              totalPages={totalPages}
+              baseUrl={`/forms/${jurisdiction}`}
+            />
+          </section>
+        )
+      );
+    })()
+  }
+
+  <QueryBox
+    query={QUERY}
+    variables={{
+      slug: jurisdiction,
+      offset,
+      size: perPage,
+    }}
+  />
 </Layout>
